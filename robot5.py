@@ -6,27 +6,20 @@ class Robot:
     FRIEND_VALUE = 0.5
     EMPTY_LOCATION_VALUE = 1
     ENEMY_WITH_FRIENDS_AROUND_VALUE = 4
-    FRIEND_WITH_ENEMIES_AROUND_VALUE = 0.5
+    FRIEND_WITH_ENEMIES_AROUND_VALUE = 4
     ENEMY_VALUE = -1
     OCCUPIED_LOCATION_VALUE = 0
     SPAWN_LOC_VALUE = -0.5
     EXPECTED_ENEMY_DAMAGE = 9
 
-    def __init__(self):
-        self.locations = {}
-
     def act(self, game):
-
+        self.locations = {}
         action = self.handle_near_enemies(game)
         if action:
             return action
 
-        # if we're in the center, stay put
-        if self.location == rg.CENTER_POINT:
-            return ['guard']
-
-        # at this point we don't have enemies near and we are not at the center
-        return self.find_path(game)
+        # at this point we don't have enemies near
+        return self.get_action(game)
 
     # utils
     def enemies_around(self, location, game):
@@ -49,12 +42,12 @@ class Robot:
         friends_near = []
         enemies_near = []
 
-        for location in locations_around:
+        for near_location in locations_around:
             try:
-                if game.robots[location].player_id == self.player_id:
-                    friends_near.append(game.robots[location])
+                if game.robots[near_location].player_id == self.player_id:
+                    friends_near.append(game.robots[near_location])
                 else:
-                    enemies_near.append(game.robots[location])
+                    enemies_near.append(game.robots[near_location])
             except:
                 pass
 
@@ -117,6 +110,33 @@ class Robot:
         return score
 
     # behaviours
+    def get_action(self, game):
+        location = self.location
+
+        locations_around = rg.locs_around(
+            location, filter_out=('invalid', 'obstacle')
+        )
+
+        locations_around.append(location)
+        rated_locations = []
+
+        for possible_location in locations_around:
+            center_dist = rg.wdist(possible_location, rg.CENTER_POINT)
+            rated_locations.append((
+                self.location_score(self.location, possible_location, game),
+                -center_dist,
+                possible_location
+            ))
+
+        rated_locations.sort(reverse=True)
+
+        selected_location = rated_locations[0][2]
+
+        if selected_location != location:
+            return ['move', selected_location]
+        else:
+            return ['guard']
+
     def handle_near_enemies(self, game):
         location = self.location
 
@@ -148,6 +168,10 @@ class Robot:
         if enemy:
             # if the damage they can deal to me is less than my life
             if self.hp > enemy_count * self.EXPECTED_ENEMY_DAMAGE:
+
+                # check if we are outnumbered
+                if enemy_count > 1 and safe_location:
+                    return ['move', safe_location]
                 return ['attack', enemy.location]
 
             # we are most certenly dead at this point if we don't move
@@ -159,32 +183,3 @@ class Robot:
             return ['suicide']
 
         return None
-
-    def find_path(self, game):
-        location = self.location
-
-        if location == rg.CENTER_POINT:
-            return ['guard']
-
-        locations_around = rg.locs_around(location,
-                                          filter_out=('invalid', 'obstacle'))
-
-        locations_around.append(location)
-        rated_locations = []
-
-        for possible_location in locations_around:
-            center_dist = rg.wdist(possible_location, rg.CENTER_POINT)
-            rated_locations.append((
-                self.location_score(self.location, possible_location, game),
-                -center_dist,
-                possible_location
-            ))
-
-        rated_locations.sort(reverse=True)
-
-        selected_location = rated_locations[0][2]
-
-        if selected_location != location:
-            return ['move', selected_location]
-        else:
-            return ['guard']
